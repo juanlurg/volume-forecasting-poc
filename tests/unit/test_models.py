@@ -440,6 +440,303 @@ class TestStatisticalModels:
         assert not predictions["prediction"].isna().any()
 
 
+def _lightgbm_available() -> bool:
+    """Check if LightGBM can be imported successfully."""
+    try:
+        from lightgbm import LGBMRegressor  # noqa: F401
+        return True
+    except (ImportError, FileNotFoundError, OSError):
+        return False
+
+
+lightgbm_available = pytest.mark.skipif(
+    not _lightgbm_available(),
+    reason="LightGBM not available (missing runtime dependencies)",
+)
+
+
+class TestTreeModels:
+    """Test suite for tree-based forecasting models (LightGBM, XGBoost)."""
+
+    @pytest.fixture
+    def simple_train_df(self) -> pd.DataFrame:
+        """Create simple training DataFrame with enough history for lag features."""
+        import numpy as np
+
+        np.random.seed(42)
+        n = 60  # Enough data for lag features (up to 14 days)
+        dates = pd.date_range("2024-01-01", periods=n, freq="D")
+        # Simple linear trend with small noise
+        values = 100 + np.arange(n) * 2 + np.random.normal(0, 5, n)
+        return pd.DataFrame({
+            "date": dates,
+            "daily_logins": values,
+        })
+
+    @pytest.fixture
+    def predict_df(self, simple_train_df: pd.DataFrame) -> pd.DataFrame:
+        """Create DataFrame for prediction starting after training data."""
+        last_date = simple_train_df["date"].iloc[-1]
+        return pd.DataFrame({
+            "date": pd.date_range(last_date + pd.Timedelta(days=1), periods=7, freq="D"),
+        })
+
+    @lightgbm_available
+    def test_lightgbm_model_extends_base_model(self) -> None:
+        """LightGBMModel should extend BaseModel."""
+        from volume_forecast.models.base import BaseModel
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel()
+        assert isinstance(model, BaseModel)
+
+    @lightgbm_available
+    def test_lightgbm_model_fit_returns_self(
+        self, simple_train_df: pd.DataFrame
+    ) -> None:
+        """fit() should return self for chaining."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel()
+        result = model.fit(simple_train_df, target="daily_logins")
+        assert result is model
+
+    @lightgbm_available
+    def test_lightgbm_model_predict_returns_dataframe(
+        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+    ) -> None:
+        """predict() should return DataFrame with date and prediction columns."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(predict_df, horizon=7)
+
+        assert isinstance(predictions, pd.DataFrame)
+        assert "date" in predictions.columns
+        assert "prediction" in predictions.columns
+        assert len(predictions) == 7
+
+    @lightgbm_available
+    def test_lightgbm_model_prediction_dates_are_sequential(
+        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+    ) -> None:
+        """Prediction dates should start after training data and be sequential."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(predict_df, horizon=7)
+
+        # First prediction should be day after last training date
+        last_train_date = simple_train_df["date"].iloc[-1]
+        expected_start = pd.Timestamp(last_train_date) + pd.Timedelta(days=1)
+        assert pd.Timestamp(predictions["date"].iloc[0]) == expected_start
+
+        # Dates should be sequential
+        expected_dates = pd.date_range(start=expected_start, periods=7, freq="D")
+        pd.testing.assert_index_equal(
+            pd.DatetimeIndex(predictions["date"]),
+            expected_dates,
+            check_names=False,
+        )
+
+    @lightgbm_available
+    def test_lightgbm_model_get_params_returns_dict(self) -> None:
+        """get_params() should return a dict with model parameters."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel(n_estimators=200, max_depth=5, learning_rate=0.05)
+        params = model.get_params()
+
+        assert isinstance(params, dict)
+        assert "name" in params
+        assert "n_estimators" in params
+        assert "max_depth" in params
+        assert "learning_rate" in params
+        assert "lags" in params
+        assert params["n_estimators"] == 200
+        assert params["max_depth"] == 5
+        assert params["learning_rate"] == 0.05
+
+    @lightgbm_available
+    def test_lightgbm_model_default_params(self) -> None:
+        """LightGBMModel should have sensible default parameters."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel()
+        params = model.get_params()
+
+        assert params["name"] == "lightgbm"
+        assert params["n_estimators"] == 100
+        assert params["max_depth"] == -1
+        assert params["learning_rate"] == 0.1
+        assert params["lags"] == [1, 7, 14]
+
+    @lightgbm_available
+    def test_lightgbm_model_raises_before_fit(self, predict_df: pd.DataFrame) -> None:
+        """predict() should raise if model hasn't been fit."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel()
+        with pytest.raises(ValueError, match="fit"):
+            model.predict(predict_df, horizon=7)
+
+    @lightgbm_available
+    def test_lightgbm_model_predictions_are_numeric(
+        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+    ) -> None:
+        """Predictions should be numeric values."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(predict_df, horizon=7)
+
+        # Check predictions are numeric
+        assert predictions["prediction"].dtype in [float, "float64", "float32"]
+        # Check no NaN values
+        assert not predictions["prediction"].isna().any()
+
+    def test_xgboost_model_extends_base_model(self) -> None:
+        """XGBoostModel should extend BaseModel."""
+        from volume_forecast.models.base import BaseModel
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel()
+        assert isinstance(model, BaseModel)
+
+    def test_xgboost_model_fit_returns_self(
+        self, simple_train_df: pd.DataFrame
+    ) -> None:
+        """fit() should return self for chaining."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel()
+        result = model.fit(simple_train_df, target="daily_logins")
+        assert result is model
+
+    def test_xgboost_model_predict_returns_dataframe(
+        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+    ) -> None:
+        """predict() should return DataFrame with date and prediction columns."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(predict_df, horizon=7)
+
+        assert isinstance(predictions, pd.DataFrame)
+        assert "date" in predictions.columns
+        assert "prediction" in predictions.columns
+        assert len(predictions) == 7
+
+    def test_xgboost_model_prediction_dates_are_sequential(
+        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+    ) -> None:
+        """Prediction dates should start after training data and be sequential."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(predict_df, horizon=7)
+
+        # First prediction should be day after last training date
+        last_train_date = simple_train_df["date"].iloc[-1]
+        expected_start = pd.Timestamp(last_train_date) + pd.Timedelta(days=1)
+        assert pd.Timestamp(predictions["date"].iloc[0]) == expected_start
+
+        # Dates should be sequential
+        expected_dates = pd.date_range(start=expected_start, periods=7, freq="D")
+        pd.testing.assert_index_equal(
+            pd.DatetimeIndex(predictions["date"]),
+            expected_dates,
+            check_names=False,
+        )
+
+    def test_xgboost_model_get_params_returns_dict(self) -> None:
+        """get_params() should return a dict with model parameters."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel(n_estimators=200, max_depth=8, learning_rate=0.05)
+        params = model.get_params()
+
+        assert isinstance(params, dict)
+        assert "name" in params
+        assert "n_estimators" in params
+        assert "max_depth" in params
+        assert "learning_rate" in params
+        assert "lags" in params
+        assert params["n_estimators"] == 200
+        assert params["max_depth"] == 8
+        assert params["learning_rate"] == 0.05
+
+    def test_xgboost_model_default_params(self) -> None:
+        """XGBoostModel should have sensible default parameters."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel()
+        params = model.get_params()
+
+        assert params["name"] == "xgboost"
+        assert params["n_estimators"] == 100
+        assert params["max_depth"] == 6
+        assert params["learning_rate"] == 0.1
+        assert params["lags"] == [1, 7, 14]
+
+    def test_xgboost_model_raises_before_fit(self, predict_df: pd.DataFrame) -> None:
+        """predict() should raise if model hasn't been fit."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel()
+        with pytest.raises(ValueError, match="fit"):
+            model.predict(predict_df, horizon=7)
+
+    def test_xgboost_model_predictions_are_numeric(
+        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+    ) -> None:
+        """Predictions should be numeric values."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(predict_df, horizon=7)
+
+        # Check predictions are numeric
+        assert predictions["prediction"].dtype in [float, "float64", "float32"]
+        # Check no NaN values
+        assert not predictions["prediction"].isna().any()
+
+    @lightgbm_available
+    def test_lightgbm_with_custom_lags(
+        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+    ) -> None:
+        """LightGBM should work with custom lag settings."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel(lags=[1, 2, 3])
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(predict_df, horizon=7)
+
+        assert len(predictions) == 7
+        params = model.get_params()
+        assert params["lags"] == [1, 2, 3]
+
+    def test_xgboost_with_custom_lags(
+        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+    ) -> None:
+        """XGBoost should work with custom lag settings."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel(lags=[1, 2, 3])
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(predict_df, horizon=7)
+
+        assert len(predictions) == 7
+        params = model.get_params()
+        assert params["lags"] == [1, 2, 3]
+
+
 class TestProphetModel:
     """Test suite for Prophet forecasting model."""
 

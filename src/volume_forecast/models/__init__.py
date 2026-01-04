@@ -8,12 +8,15 @@ from volume_forecast.models.baselines import (
 )
 from volume_forecast.models.prophet_model import ProphetModel
 from volume_forecast.models.statistical import ARIMAModel
+from volume_forecast.models.tree_models import LightGBMModel, XGBoostModel
 
 __all__ = [
     "ARIMAModel",
     "BaseModel",
+    "LightGBMModel",
     "MovingAverageModel",
     "NaiveModel",
     "ProphetModel",
     "SeasonalNaiveModel",
+    "XGBoostModel",
 ]
