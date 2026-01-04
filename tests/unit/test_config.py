@@ -27,3 +27,24 @@ class TestConstants:
 
         total = sum(seg["percentage"] for seg in CUSTOMER_SEGMENTS.values())
         assert total == 100
+
+
+class TestSettings:
+    """Test suite for settings."""
+
+    def test_settings_loads_defaults(self) -> None:
+        """Settings should load with sensible defaults."""
+        from volume_forecast.config.settings import Settings
+
+        settings = Settings()
+        assert settings.forecast_horizon == 7
+        assert settings.random_seed == 42
+
+    def test_settings_paths_are_pathlib(self) -> None:
+        """Settings paths should be Path objects."""
+        from pathlib import Path
+
+        from volume_forecast.config.settings import Settings
+
+        settings = Settings()
+        assert isinstance(settings.data_dir, Path)
