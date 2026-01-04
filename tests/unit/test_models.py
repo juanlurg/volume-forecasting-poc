@@ -918,3 +918,186 @@ class TestProphetModel:
         assert "prediction" in predictions.columns
         # Predictions should be reasonable (positive values)
         assert all(predictions["prediction"] > 0)
+
+
+class TestEnsembleModel:
+    """Test suite for ensemble forecasting model."""
+
+    @pytest.fixture
+    def sample_train_df(self) -> pd.DataFrame:
+        """Create sample training DataFrame with known values."""
+        return pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=14, freq="D"),
+            "daily_logins": [100, 110, 120, 130, 140, 150, 160,  # Week 1
+                             200, 210, 220, 230, 240, 250, 260],  # Week 2
+        })
+
+    def test_ensemble_model_extends_base_model(self) -> None:
+        """EnsembleModel should extend BaseModel."""
+        from volume_forecast.models.base import BaseModel
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        ensemble = EnsembleModel(models=[naive, ma])
+        assert isinstance(ensemble, BaseModel)
+
+    def test_ensemble_model_fit_returns_self(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """fit() should return self for chaining."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        ensemble = EnsembleModel(models=[naive, ma])
+        result = ensemble.fit(sample_train_df, target="daily_logins")
+        assert result is ensemble
+
+    def test_ensemble_model_predict_returns_dataframe(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """predict() should return DataFrame with date and prediction columns."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        ensemble = EnsembleModel(models=[naive, ma])
+        ensemble.fit(sample_train_df, target="daily_logins")
+        predictions = ensemble.predict(horizon=7)
+
+        assert isinstance(predictions, pd.DataFrame)
+        assert "date" in predictions.columns
+        assert "prediction" in predictions.columns
+        assert len(predictions) == 7
+
+    def test_ensemble_weighted_average(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """Predictions should be weighted average of component models."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()  # Predicts 260 (last value)
+        ma = MovingAverageModel(window=7)  # Predicts 230 (mean of last 7)
+
+        # Weight naive at 0.7, ma at 0.3
+        weights = [0.7, 0.3]
+        ensemble = EnsembleModel(models=[naive, ma], weights=weights)
+        ensemble.fit(sample_train_df, target="daily_logins")
+        predictions = ensemble.predict(horizon=3)
+
+        # Expected: 0.7 * 260 + 0.3 * 230 = 182 + 69 = 251
+        expected_prediction = 0.7 * 260 + 0.3 * 230
+        assert all(predictions["prediction"] == expected_prediction)
+
+    def test_ensemble_equal_weights(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """With equal weights (None), should be simple average."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()  # Predicts 260
+        ma = MovingAverageModel(window=7)  # Predicts 230
+
+        # No weights means equal weights (0.5 each)
+        ensemble = EnsembleModel(models=[naive, ma])
+        ensemble.fit(sample_train_df, target="daily_logins")
+        predictions = ensemble.predict(horizon=3)
+
+        # Expected: (260 + 230) / 2 = 245
+        expected_prediction = (260 + 230) / 2
+        assert all(predictions["prediction"] == expected_prediction)
+
+    def test_ensemble_default_name(self) -> None:
+        """EnsembleModel should have default name 'ensemble'."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        ensemble = EnsembleModel(models=[naive, ma])
+        assert ensemble.name == "ensemble"
+
+    def test_ensemble_custom_name(self) -> None:
+        """EnsembleModel should accept custom name."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        ensemble = EnsembleModel(models=[naive, ma], name="my_ensemble")
+        assert ensemble.name == "my_ensemble"
+
+    def test_ensemble_get_params_returns_dict(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """get_params() should return a dict with model names and weights."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        weights = [0.6, 0.4]
+        ensemble = EnsembleModel(models=[naive, ma], weights=weights)
+        params = ensemble.get_params()
+
+        assert isinstance(params, dict)
+        assert "name" in params
+        assert params["name"] == "ensemble"
+        assert "model_names" in params
+        assert params["model_names"] == ["naive", "moving_average"]
+        assert "weights" in params
+        assert params["weights"] == [0.6, 0.4]
+
+    def test_ensemble_raises_before_fit(self) -> None:
+        """predict() should raise if model hasn't been fit."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        ensemble = EnsembleModel(models=[naive, ma])
+        with pytest.raises(ValueError, match="fit"):
+            ensemble.predict(horizon=7)
+
+    def test_ensemble_prediction_dates_are_sequential(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """Prediction dates should start after training data and be sequential."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        ensemble = EnsembleModel(models=[naive, ma])
+        ensemble.fit(sample_train_df, target="daily_logins")
+        predictions = ensemble.predict(horizon=7)
+
+        # First prediction should be day after last training date (2024-01-15)
+        last_train_date = sample_train_df["date"].iloc[-1]
+        expected_start = pd.Timestamp(last_train_date) + pd.Timedelta(days=1)
+        assert pd.Timestamp(predictions["date"].iloc[0]) == expected_start
+
+        # Dates should be sequential
+        expected_dates = pd.date_range(start=expected_start, periods=7, freq="D")
+        pd.testing.assert_index_equal(
+            pd.DatetimeIndex(predictions["date"]),
+            expected_dates,
+            check_names=False,
+        )
+
+    def test_ensemble_weights_must_sum_to_one(self) -> None:
+        """Weights should sum to 1.0."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        # Weights that don't sum to 1.0 should raise
+        with pytest.raises(ValueError, match="sum"):
+            EnsembleModel(models=[naive, ma], weights=[0.5, 0.3])

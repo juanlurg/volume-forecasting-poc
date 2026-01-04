@@ -6,6 +6,7 @@ from volume_forecast.models.baselines import (
     NaiveModel,
     SeasonalNaiveModel,
 )
+from volume_forecast.models.ensemble import EnsembleModel
 from volume_forecast.models.prophet_model import ProphetModel
 from volume_forecast.models.statistical import ARIMAModel
 from volume_forecast.models.tree_models import LightGBMModel, XGBoostModel
@@ -13,6 +14,7 @@ from volume_forecast.models.tree_models import LightGBMModel, XGBoostModel
 __all__ = [
     "ARIMAModel",
     "BaseModel",
+    "EnsembleModel",
     "LightGBMModel",
     "MovingAverageModel",
     "NaiveModel",
