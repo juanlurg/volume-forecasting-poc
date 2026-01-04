@@ -83,3 +83,46 @@ class TestTemporalFeatures:
         assert "day_of_week_cos" in result.columns
         assert "month_sin" in result.columns
         assert "month_cos" in result.columns
+
+
+class TestLagFeatures:
+    """Test suite for lag features."""
+
+    @pytest.fixture
+    def sample_df(self) -> pd.DataFrame:
+        """Create sample DataFrame."""
+        return pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=30, freq="D"),
+            "daily_logins": range(100, 130),
+        })
+
+    def test_creates_lag_columns(self, sample_df: pd.DataFrame) -> None:
+        """Should create lag columns."""
+        from volume_forecast.features.lags import LagFeatures
+
+        transformer = LagFeatures(columns=["daily_logins"], lags=[1, 7])
+        result = transformer.fit_transform(sample_df)
+
+        assert "daily_logins_lag_1" in result.columns
+        assert "daily_logins_lag_7" in result.columns
+
+    def test_lag_values_correct(self, sample_df: pd.DataFrame) -> None:
+        """Lag values should be shifted correctly."""
+        from volume_forecast.features.lags import LagFeatures
+
+        transformer = LagFeatures(columns=["daily_logins"], lags=[1])
+        result = transformer.fit_transform(sample_df)
+
+        # Row 1's lag_1 should equal row 0's value
+        assert result["daily_logins_lag_1"].iloc[1] == sample_df["daily_logins"].iloc[0]
+
+    def test_handles_missing_at_start(self, sample_df: pd.DataFrame) -> None:
+        """Should handle missing values at series start."""
+        from volume_forecast.features.lags import LagFeatures
+
+        transformer = LagFeatures(columns=["daily_logins"], lags=[7])
+        result = transformer.fit_transform(sample_df)
+
+        # First 7 values should be NaN
+        assert result["daily_logins_lag_7"].iloc[:7].isna().all()
+        assert result["daily_logins_lag_7"].iloc[7:].notna().all()
