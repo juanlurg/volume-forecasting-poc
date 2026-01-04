@@ -119,3 +119,44 @@ class TestFootballClient:
             away_team="Liverpool",
         )
         assert importance == "high"
+
+
+class TestStaticEventsCalendar:
+    """Test suite for static events calendar."""
+
+    def test_get_racing_events_2024(self) -> None:
+        """Should return major racing events for 2024."""
+        from volume_forecast.external_data.static_events import StaticEventsCalendar
+
+        calendar = StaticEventsCalendar()
+        events = calendar.get_racing_events(2024)
+
+        # Should have Cheltenham, Grand National, Royal Ascot
+        event_names = [e["name"] for e in events]
+        assert any("Cheltenham" in name for name in event_names)
+        assert any("Grand National" in name for name in event_names)
+        assert any("Ascot" in name for name in event_names)
+
+    def test_get_tennis_events(self) -> None:
+        """Should return 4 Grand Slam events (with start and final dates)."""
+        from volume_forecast.external_data.static_events import StaticEventsCalendar
+
+        calendar = StaticEventsCalendar()
+        events = calendar.get_tennis_events(2024)
+
+        assert len(events) == 8  # 4 Grand Slams with start and final
+        event_names = [e["name"] for e in events]
+        assert any("Wimbledon" in name for name in event_names)
+
+    def test_get_all_events_in_range(self) -> None:
+        """Should return all events in a date range."""
+        from volume_forecast.external_data.static_events import StaticEventsCalendar
+
+        calendar = StaticEventsCalendar()
+        events = calendar.get_events_in_range(
+            date(2024, 3, 1),
+            date(2024, 3, 31),
+        )
+
+        # March should have Cheltenham
+        assert any("Cheltenham" in e["name"] for e in events)
