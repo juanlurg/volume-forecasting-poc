@@ -126,3 +126,45 @@ class TestLagFeatures:
         # First 7 values should be NaN
         assert result["daily_logins_lag_7"].iloc[:7].isna().all()
         assert result["daily_logins_lag_7"].iloc[7:].notna().all()
+
+
+class TestRollingFeatures:
+    """Test suite for rolling features."""
+
+    @pytest.fixture
+    def sample_df(self) -> pd.DataFrame:
+        """Create sample DataFrame."""
+        return pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=30, freq="D"),
+            "daily_logins": [100] * 30,  # Constant for easy verification
+        })
+
+    def test_creates_rolling_mean(self, sample_df: pd.DataFrame) -> None:
+        """Should create rolling mean columns."""
+        from volume_forecast.features.rolling import RollingFeatures
+
+        transformer = RollingFeatures(columns=["daily_logins"], windows=[7])
+        result = transformer.fit_transform(sample_df)
+
+        assert "daily_logins_rolling_mean_7" in result.columns
+
+    def test_rolling_mean_value(self, sample_df: pd.DataFrame) -> None:
+        """Rolling mean should be correct."""
+        from volume_forecast.features.rolling import RollingFeatures
+
+        transformer = RollingFeatures(columns=["daily_logins"], windows=[7])
+        result = transformer.fit_transform(sample_df)
+
+        # For constant values, rolling mean should equal the value
+        assert result["daily_logins_rolling_mean_7"].iloc[7] == 100.0
+
+    def test_creates_rolling_std(self, sample_df: pd.DataFrame) -> None:
+        """Should create rolling std columns."""
+        from volume_forecast.features.rolling import RollingFeatures
+
+        transformer = RollingFeatures(
+            columns=["daily_logins"], windows=[7], stats=["mean", "std"]
+        )
+        result = transformer.fit_transform(sample_df)
+
+        assert "daily_logins_rolling_std_7" in result.columns
