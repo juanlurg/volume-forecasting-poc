@@ -76,3 +76,46 @@ class TestUKHolidaysClient:
 
         assert client.is_holiday(date(2024, 1, 1)) is True
         assert client.is_holiday(date(2024, 6, 15)) is False
+
+
+class TestFootballClient:
+    """Test suite for football events client."""
+
+    def test_determine_importance_champions_league_final(self) -> None:
+        """Champions League final should be major importance."""
+        from volume_forecast.external_data.football import FootballClient
+
+        client = FootballClient()
+        importance = client._determine_importance(
+            competition="UEFA Champions League",
+            stage="FINAL",
+            home_team="Real Madrid",
+            away_team="Liverpool",
+        )
+        assert importance == "major"
+
+    def test_determine_importance_premier_league_regular(self) -> None:
+        """Regular PL match should be medium importance."""
+        from volume_forecast.external_data.football import FootballClient
+
+        client = FootballClient()
+        importance = client._determine_importance(
+            competition="Premier League",
+            stage="REGULAR_SEASON",
+            home_team="Bournemouth",
+            away_team="Brentford",
+        )
+        assert importance == "medium"
+
+    def test_determine_importance_big_six_match(self) -> None:
+        """Big six match should be high importance."""
+        from volume_forecast.external_data.football import FootballClient
+
+        client = FootballClient()
+        importance = client._determine_importance(
+            competition="Premier League",
+            stage="REGULAR_SEASON",
+            home_team="Manchester United",
+            away_team="Liverpool",
+        )
+        assert importance == "high"
