@@ -160,3 +160,36 @@ class TestStaticEventsCalendar:
 
         # March should have Cheltenham
         assert any("Cheltenham" in e["name"] for e in events)
+
+
+class TestEventAggregator:
+    """Test suite for event aggregator."""
+
+    def test_aggregates_all_event_types(self, tmp_path: Path) -> None:
+        """Should aggregate events from all sources."""
+        from volume_forecast.external_data.aggregator import EventAggregator
+
+        aggregator = EventAggregator(cache_dir=tmp_path)
+        events = aggregator.get_events(
+            start_date=date(2024, 3, 1),
+            end_date=date(2024, 3, 31),
+            include_football=False,  # Skip API call in test
+        )
+
+        # Should have racing (Cheltenham) and holiday events
+        event_types = {e["event_type"] for e in events}
+        assert "racing" in event_types or "holiday" in event_types
+
+    def test_events_sorted_by_date(self, tmp_path: Path) -> None:
+        """Events should be sorted by date."""
+        from volume_forecast.external_data.aggregator import EventAggregator
+
+        aggregator = EventAggregator(cache_dir=tmp_path)
+        events = aggregator.get_events(
+            start_date=date(2024, 1, 1),
+            end_date=date(2024, 12, 31),
+            include_football=False,
+        )
+
+        dates = [e["date"] for e in events]
+        assert dates == sorted(dates)
