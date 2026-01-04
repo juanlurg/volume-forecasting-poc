@@ -6,6 +6,7 @@ from volume_forecast.models.baselines import (
     NaiveModel,
     SeasonalNaiveModel,
 )
+from volume_forecast.models.prophet_model import ProphetModel
 from volume_forecast.models.statistical import ARIMAModel
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "BaseModel",
     "MovingAverageModel",
     "NaiveModel",
+    "ProphetModel",
     "SeasonalNaiveModel",
 ]

@@ -438,3 +438,186 @@ class TestStatisticalModels:
         assert predictions["prediction"].dtype in [float, "float64", "float32"]
         # Check no NaN values
         assert not predictions["prediction"].isna().any()
+
+
+class TestProphetModel:
+    """Test suite for Prophet forecasting model."""
+
+    @pytest.fixture
+    def simple_train_df(self) -> pd.DataFrame:
+        """Create simple training DataFrame for Prophet (60-90 days for faster tests)."""
+        import numpy as np
+
+        np.random.seed(42)
+        n = 60  # Smaller dataset for faster Prophet fitting
+        dates = pd.date_range("2024-01-01", periods=n, freq="D")
+        # Simple linear trend with small noise
+        values = 100 + np.arange(n) * 2 + np.random.normal(0, 5, n)
+        return pd.DataFrame({
+            "date": dates,
+            "daily_logins": values,
+        })
+
+    @pytest.fixture
+    def seasonal_train_df(self) -> pd.DataFrame:
+        """Create training DataFrame with weekly seasonality for Prophet."""
+        import numpy as np
+
+        np.random.seed(42)
+        n = 90  # 12+ weeks of data for seasonality
+        dates = pd.date_range("2024-01-01", periods=n, freq="D")
+        # Weekly pattern: higher on weekends
+        seasonal = np.array([0, 0, 0, 0, 10, 20, 15] * (n // 7 + 1))[:n]
+        values = 100 + seasonal + np.random.normal(0, 3, n)
+        return pd.DataFrame({
+            "date": dates,
+            "daily_logins": values,
+        })
+
+    def test_prophet_model_extends_base_model(self) -> None:
+        """ProphetModel should extend BaseModel."""
+        from volume_forecast.models.base import BaseModel
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        assert isinstance(model, BaseModel)
+
+    @pytest.mark.slow
+    def test_prophet_model_fit_returns_self(
+        self, simple_train_df: pd.DataFrame
+    ) -> None:
+        """fit() should return self for chaining."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        result = model.fit(simple_train_df, target="daily_logins")
+        assert result is model
+
+    @pytest.mark.slow
+    def test_prophet_model_predict_returns_dataframe(
+        self, simple_train_df: pd.DataFrame
+    ) -> None:
+        """predict() should return DataFrame with date and prediction columns."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(horizon=7)
+
+        assert isinstance(predictions, pd.DataFrame)
+        assert "date" in predictions.columns
+        assert "prediction" in predictions.columns
+
+    @pytest.mark.slow
+    def test_prophet_model_prediction_length(
+        self, simple_train_df: pd.DataFrame
+    ) -> None:
+        """predictions should have correct length (horizon)."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        model.fit(simple_train_df, target="daily_logins")
+
+        for horizon in [3, 7, 14]:
+            predictions = model.predict(horizon=horizon)
+            assert len(predictions) == horizon
+
+    @pytest.mark.slow
+    def test_prophet_model_prediction_dates_are_sequential(
+        self, simple_train_df: pd.DataFrame
+    ) -> None:
+        """Prediction dates should start after training data and be sequential."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(horizon=7)
+
+        # First prediction should be day after last training date
+        last_train_date = simple_train_df["date"].iloc[-1]
+        expected_start = pd.Timestamp(last_train_date) + pd.Timedelta(days=1)
+        assert pd.Timestamp(predictions["date"].iloc[0]) == expected_start
+
+        # Dates should be sequential
+        expected_dates = pd.date_range(start=expected_start, periods=7, freq="D")
+        pd.testing.assert_index_equal(
+            pd.DatetimeIndex(predictions["date"]),
+            expected_dates,
+            check_names=False,
+        )
+
+    def test_prophet_model_get_params_returns_dict(self) -> None:
+        """get_params() should return a dict with seasonality settings."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel(
+            yearly_seasonality=True,
+            weekly_seasonality=True,
+            daily_seasonality=False,
+        )
+        params = model.get_params()
+
+        assert isinstance(params, dict)
+        assert "name" in params
+        assert "yearly_seasonality" in params
+        assert "weekly_seasonality" in params
+        assert "daily_seasonality" in params
+        assert params["yearly_seasonality"] is True
+        assert params["weekly_seasonality"] is True
+        assert params["daily_seasonality"] is False
+
+    def test_prophet_model_default_params(self) -> None:
+        """ProphetModel should have sensible default parameters."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        params = model.get_params()
+
+        assert params["name"] == "prophet"
+        assert params["yearly_seasonality"] is True
+        assert params["weekly_seasonality"] is True
+        assert params["daily_seasonality"] is False
+
+    def test_prophet_model_raises_before_fit(self) -> None:
+        """predict() should raise if model hasn't been fit."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        with pytest.raises(ValueError, match="fit"):
+            model.predict(horizon=7)
+
+    @pytest.mark.slow
+    def test_prophet_model_predictions_are_numeric(
+        self, simple_train_df: pd.DataFrame
+    ) -> None:
+        """Predictions should be numeric values."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        model.fit(simple_train_df, target="daily_logins")
+        predictions = model.predict(horizon=7)
+
+        # Check predictions are numeric
+        assert predictions["prediction"].dtype in [float, "float64", "float32"]
+        # Check no NaN values
+        assert not predictions["prediction"].isna().any()
+
+    @pytest.mark.slow
+    def test_prophet_model_with_custom_seasonality(
+        self, seasonal_train_df: pd.DataFrame
+    ) -> None:
+        """Prophet should work with custom seasonality settings."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel(
+            yearly_seasonality=False,
+            weekly_seasonality=True,
+            daily_seasonality=False,
+        )
+        model.fit(seasonal_train_df, target="daily_logins")
+        predictions = model.predict(horizon=7)
+
+        assert len(predictions) == 7
+        assert "prediction" in predictions.columns
+        # Predictions should be reasonable (positive values)
+        assert all(predictions["prediction"] > 0)
