@@ -6,8 +6,10 @@ from volume_forecast.models.baselines import (
     NaiveModel,
     SeasonalNaiveModel,
 )
+from volume_forecast.models.statistical import ARIMAModel
 
 __all__ = [
+    "ARIMAModel",
     "BaseModel",
     "MovingAverageModel",
     "NaiveModel",

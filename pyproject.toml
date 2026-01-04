@@ -46,6 +46,9 @@ packages = ["src/volume_forecast"]
 testpaths = ["tests"]
 pythonpath = ["src"]
 addopts = ["-ra", "-q", "--strict-markers"]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
 
 [tool.ruff]
 target-version = "py311"
