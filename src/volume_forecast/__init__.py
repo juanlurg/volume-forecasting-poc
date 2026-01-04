@@ -1,2 +1,3 @@
-def hello() -> str:
-    return "Hello from volume-forecast!"
+"""Volume Forecasting POC for betting platform."""
+
+__version__ = "0.1.0"
