@@ -7,6 +7,7 @@ from volume_forecast.evaluation.metrics import (
     rmse,
     smape,
 )
+from volume_forecast.evaluation.validation import WalkForwardValidator
 
 __all__ = [
     "mae",
@@ -14,4 +15,5 @@ __all__ = [
     "mape",
     "smape",
     "calculate_all_metrics",
+    "WalkForwardValidator",
 ]
