@@ -1101,3 +1101,90 @@ class TestEnsembleModel:
         # Weights that don't sum to 1.0 should raise
         with pytest.raises(ValueError, match="sum"):
             EnsembleModel(models=[naive, ma], weights=[0.5, 0.3])
+
+
+class TestModelRegistry:
+    """Test suite for model registry."""
+
+    def test_registry_get_returns_model(self) -> None:
+        """get() should return instantiated model."""
+        from volume_forecast.models.base import BaseModel
+        from volume_forecast.models.registry import ModelRegistry
+
+        model = ModelRegistry.get("naive")
+        assert isinstance(model, BaseModel)
+        assert model.name == "naive"
+
+    def test_registry_list_available(self) -> None:
+        """list_available() should return list of model names."""
+        from volume_forecast.models.registry import ModelRegistry
+
+        available = ModelRegistry.list_available()
+        assert isinstance(available, list)
+        assert "naive" in available
+        assert "seasonal_naive" in available
+        assert "moving_average" in available
+        assert "arima" in available
+        assert "prophet" in available
+        assert "lightgbm" in available
+        assert "xgboost" in available
+
+    def test_registry_unknown_model_raises(self) -> None:
+        """get() with unknown name should raise ValueError."""
+        from volume_forecast.models.registry import ModelRegistry
+
+        with pytest.raises(ValueError, match="Unknown model"):
+            ModelRegistry.get("nonexistent_model")
+
+    def test_registry_get_with_params(self) -> None:
+        """get() should pass kwargs to model constructor."""
+        from volume_forecast.models.registry import ModelRegistry
+
+        # Test with MovingAverageModel which accepts window parameter
+        model = ModelRegistry.get("moving_average", window=14)
+        params = model.get_params()
+        assert params["window"] == 14
+
+        # Test with SeasonalNaiveModel which accepts season_length parameter
+        model = ModelRegistry.get("seasonal_naive", season_length=14)
+        params = model.get_params()
+        assert params["season_length"] == 14
+
+    def test_registry_register_new_model(self) -> None:
+        """register() should add new model to registry."""
+        from volume_forecast.models.base import BaseModel
+        from volume_forecast.models.registry import ModelRegistry
+
+        # Create a dummy model class for testing
+        class DummyModel(BaseModel):
+            def __init__(self, name: str = "dummy") -> None:
+                super().__init__(name)
+
+            def fit(self, train_df, target: str):
+                return self
+
+            def predict(self, df, horizon: int):
+                import pandas as pd
+                return pd.DataFrame({"date": [], "prediction": []})
+
+        # Register it
+        ModelRegistry.register("dummy_test", DummyModel)
+
+        # Verify it's in the list
+        assert "dummy_test" in ModelRegistry.list_available()
+
+        # Verify we can instantiate it
+        model = ModelRegistry.get("dummy_test")
+        assert isinstance(model, DummyModel)
+
+        # Clean up - remove from registry after test
+        del ModelRegistry.MODELS["dummy_test"]
+
+    def test_registry_models_attribute_is_dict(self) -> None:
+        """MODELS class attribute should be a dict mapping names to classes."""
+        from volume_forecast.models.registry import ModelRegistry
+
+        assert hasattr(ModelRegistry, "MODELS")
+        assert isinstance(ModelRegistry.MODELS, dict)
+        # Should have at least the 7 required models
+        assert len(ModelRegistry.MODELS) >= 7
