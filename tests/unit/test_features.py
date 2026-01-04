@@ -168,3 +168,48 @@ class TestRollingFeatures:
         result = transformer.fit_transform(sample_df)
 
         assert "daily_logins_rolling_std_7" in result.columns
+
+
+class TestFeaturePipeline:
+    """Test suite for feature pipeline."""
+
+    @pytest.fixture
+    def sample_df(self) -> pd.DataFrame:
+        """Create sample DataFrame."""
+        return pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=60, freq="D"),
+            "daily_logins": range(1000, 1060),
+            "daily_deposits": range(100, 160),
+        })
+
+    def test_pipeline_chains_transformers(self, sample_df: pd.DataFrame) -> None:
+        """Pipeline should chain multiple transformers."""
+        from volume_forecast.features.pipeline import FeaturePipeline
+
+        pipeline = FeaturePipeline(
+            date_column="date",
+            target_columns=["daily_logins"],
+            lags=[1, 7],
+            rolling_windows=[7],
+        )
+        result = pipeline.fit_transform(sample_df)
+
+        # Should have temporal, lag, and rolling features
+        assert "day_of_week" in result.columns
+        assert "daily_logins_lag_1" in result.columns
+        assert "daily_logins_rolling_mean_7" in result.columns
+
+    def test_get_all_feature_names(self, sample_df: pd.DataFrame) -> None:
+        """Should return all generated feature names."""
+        from volume_forecast.features.pipeline import FeaturePipeline
+
+        pipeline = FeaturePipeline(
+            date_column="date",
+            target_columns=["daily_logins"],
+        )
+        result = pipeline.fit_transform(sample_df)
+        feature_names = pipeline.get_feature_names()
+
+        assert len(feature_names) > 0
+        for name in feature_names:
+            assert name in result.columns
