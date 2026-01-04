@@ -429,3 +429,153 @@ class TestWalkForwardValidator:
         # Fold 3: train [0:393], test [393:400] (needs 400 samples) - exact fit!
         # Next fold would need 414 samples, so only 3 folds
         assert n_splits == 3
+
+
+class TestModelComparison:
+    """Test suite for model comparison utilities."""
+
+    @pytest.fixture
+    def sample_df(self) -> pd.DataFrame:
+        """Create sample DataFrame with 100 days of data for fast testing."""
+        np.random.seed(42)
+        dates = pd.date_range(start="2023-01-01", periods=100, freq="D")
+        return pd.DataFrame(
+            {
+                "date": dates,
+                "daily_logins": np.random.randint(1000, 5000, size=100),
+            }
+        )
+
+    @pytest.fixture
+    def validator(self) -> "WalkForwardValidator":
+        """Create a validator with small sizes for fast testing."""
+        from volume_forecast.evaluation.validation import WalkForwardValidator
+
+        return WalkForwardValidator(min_train_size=50, test_size=7, step_size=7)
+
+    @pytest.fixture
+    def models(self) -> list:
+        """Create simple baseline models for testing."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+
+        return [
+            NaiveModel(name="naive"),
+            MovingAverageModel(window=7, name="moving_average_7"),
+        ]
+
+    def test_benchmark_returns_dataframe(
+        self, sample_df: pd.DataFrame, validator: "WalkForwardValidator", models: list
+    ) -> None:
+        """benchmark() should return DataFrame with results."""
+        from volume_forecast.evaluation.comparison import ModelBenchmark
+
+        benchmark = ModelBenchmark(models=models, validator=validator)
+        results = benchmark.benchmark(sample_df, target="daily_logins", date_column="date")
+
+        assert isinstance(results, pd.DataFrame)
+        assert len(results) > 0
+
+    def test_benchmark_includes_all_models(
+        self, sample_df: pd.DataFrame, validator: "WalkForwardValidator", models: list
+    ) -> None:
+        """Results should include all provided models."""
+        from volume_forecast.evaluation.comparison import ModelBenchmark
+
+        benchmark = ModelBenchmark(models=models, validator=validator)
+        results = benchmark.benchmark(sample_df, target="daily_logins", date_column="date")
+
+        assert "model_name" in results.columns
+        model_names = results["model_name"].tolist()
+        assert "naive" in model_names
+        assert "moving_average_7" in model_names
+        assert len(model_names) == 2
+
+    def test_benchmark_includes_all_metrics(
+        self, sample_df: pd.DataFrame, validator: "WalkForwardValidator", models: list
+    ) -> None:
+        """Results should include MAE, RMSE, MAPE, sMAPE."""
+        from volume_forecast.evaluation.comparison import ModelBenchmark
+
+        benchmark = ModelBenchmark(models=models, validator=validator)
+        results = benchmark.benchmark(sample_df, target="daily_logins", date_column="date")
+
+        expected_columns = [
+            "model_name",
+            "mae_mean",
+            "mae_std",
+            "rmse_mean",
+            "rmse_std",
+            "mape_mean",
+            "mape_std",
+            "smape_mean",
+            "smape_std",
+        ]
+        for col in expected_columns:
+            assert col in results.columns, f"Missing column: {col}"
+
+    def test_get_best_model(
+        self, sample_df: pd.DataFrame, validator: "WalkForwardValidator", models: list
+    ) -> None:
+        """get_best_model() should return model with lowest metric."""
+        from volume_forecast.evaluation.comparison import ModelBenchmark
+        from volume_forecast.models.base import BaseModel
+
+        benchmark = ModelBenchmark(models=models, validator=validator)
+        benchmark.benchmark(sample_df, target="daily_logins", date_column="date")
+
+        best_model = benchmark.get_best_model(metric="mae")
+
+        assert isinstance(best_model, BaseModel)
+        # The best model should be one of the provided models
+        assert best_model.name in ["naive", "moving_average_7"]
+
+    def test_get_best_model_with_different_metrics(
+        self, sample_df: pd.DataFrame, validator: "WalkForwardValidator", models: list
+    ) -> None:
+        """get_best_model() should work with different metrics."""
+        from volume_forecast.evaluation.comparison import ModelBenchmark
+
+        benchmark = ModelBenchmark(models=models, validator=validator)
+        benchmark.benchmark(sample_df, target="daily_logins", date_column="date")
+
+        # Test with all supported metrics
+        for metric in ["mae", "rmse", "mape", "smape"]:
+            best_model = benchmark.get_best_model(metric=metric)
+            assert best_model.name in ["naive", "moving_average_7"]
+
+    def test_get_results_summary(
+        self, sample_df: pd.DataFrame, validator: "WalkForwardValidator", models: list
+    ) -> None:
+        """get_results_summary() should return the comparison DataFrame."""
+        from volume_forecast.evaluation.comparison import ModelBenchmark
+
+        benchmark = ModelBenchmark(models=models, validator=validator)
+        benchmark.benchmark(sample_df, target="daily_logins", date_column="date")
+
+        summary = benchmark.get_results_summary()
+
+        assert isinstance(summary, pd.DataFrame)
+        assert "model_name" in summary.columns
+        assert len(summary) == 2
+
+    def test_get_best_model_raises_before_benchmark(
+        self, validator: "WalkForwardValidator", models: list
+    ) -> None:
+        """get_best_model() should raise error if benchmark not run."""
+        from volume_forecast.evaluation.comparison import ModelBenchmark
+
+        benchmark = ModelBenchmark(models=models, validator=validator)
+
+        with pytest.raises(ValueError, match="benchmark"):
+            benchmark.get_best_model(metric="mae")
+
+    def test_get_results_summary_raises_before_benchmark(
+        self, validator: "WalkForwardValidator", models: list
+    ) -> None:
+        """get_results_summary() should raise error if benchmark not run."""
+        from volume_forecast.evaluation.comparison import ModelBenchmark
+
+        benchmark = ModelBenchmark(models=models, validator=validator)
+
+        with pytest.raises(ValueError, match="benchmark"):
+            benchmark.get_results_summary()

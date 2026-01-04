@@ -25,7 +25,7 @@ class ForecastModel(Protocol):
         """Fit the model to training data."""
         ...
 
-    def predict(self, df: pd.DataFrame, horizon: int) -> pd.DataFrame:
+    def predict(self, horizon: int) -> pd.DataFrame:
         """Generate predictions."""
         ...
 
@@ -168,7 +168,7 @@ class WalkForwardValidator:
             model.fit(train_df, target)
 
             # Generate predictions
-            predictions_df = model.predict(test_df, horizon=self.test_size)
+            predictions_df = model.predict(horizon=self.test_size)
 
             # Get actual values
             y_true = test_df[target].values
