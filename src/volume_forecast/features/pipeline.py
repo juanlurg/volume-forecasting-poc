@@ -140,4 +140,5 @@ class FeaturePipeline(BaseTransformer):
             "cyclical": self.cyclical,
             "include_events": self.include_events,
             "include_football": self.include_football,
+            "events_cache_dir": self.events_cache_dir,
         }
