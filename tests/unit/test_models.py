@@ -1254,6 +1254,132 @@ class TestTreeModelsWithFeatures:
             model.predict(horizon=7)
 
 
+class TestProphetWithRegressors:
+    """Test Prophet model with external regressors."""
+
+    @pytest.fixture
+    def sample_df_with_regressors(self) -> pd.DataFrame:
+        """Create sample DataFrame with regressor columns."""
+        return pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=60, freq="D"),
+            "daily_logins": range(1000, 1060),
+            "is_bank_holiday": [0] * 55 + [1] * 5,
+            "event_importance": [0] * 50 + [3] * 10,
+        })
+
+    @pytest.mark.slow
+    def test_prophet_accepts_regressors(
+        self, sample_df_with_regressors: pd.DataFrame
+    ) -> None:
+        """Prophet should accept regressor columns."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel(
+            regressors=["is_bank_holiday", "event_importance"],
+        )
+        model.fit(sample_df_with_regressors, target="daily_logins")
+
+        assert model._model is not None
+
+    @pytest.mark.slow
+    def test_prophet_predict_with_future_regressors(
+        self, sample_df_with_regressors: pd.DataFrame
+    ) -> None:
+        """Prophet should use future_df for regressor values."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel(
+            regressors=["is_bank_holiday", "event_importance"],
+        )
+        model.fit(sample_df_with_regressors, target="daily_logins")
+
+        future_df = pd.DataFrame({
+            "date": pd.date_range("2024-03-01", periods=7, freq="D"),
+            "is_bank_holiday": [0, 0, 0, 0, 0, 0, 0],
+            "event_importance": [0, 0, 0, 0, 0, 0, 0],
+        })
+
+        predictions = model.predict(horizon=7, future_df=future_df)
+        assert len(predictions) == 7
+
+    @pytest.mark.slow
+    def test_prophet_raises_without_future_df_when_regressors_used(
+        self, sample_df_with_regressors: pd.DataFrame
+    ) -> None:
+        """Prophet should raise when regressors used but no future_df provided."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel(
+            regressors=["is_bank_holiday", "event_importance"],
+        )
+        model.fit(sample_df_with_regressors, target="daily_logins")
+
+        with pytest.raises(ValueError, match="future_df required"):
+            model.predict(horizon=7)
+
+    @pytest.mark.slow
+    def test_prophet_raises_when_regressor_missing_in_training(self) -> None:
+        """Prophet should raise when regressor not found in training data."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        df = pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=60, freq="D"),
+            "daily_logins": range(1000, 1060),
+            "is_bank_holiday": [0] * 60,
+            # Missing event_importance column
+        })
+
+        model = ProphetModel(
+            regressors=["is_bank_holiday", "event_importance"],
+        )
+
+        with pytest.raises(ValueError, match="event_importance.*not found"):
+            model.fit(df, target="daily_logins")
+
+    @pytest.mark.slow
+    def test_prophet_raises_when_regressor_missing_in_future_df(
+        self, sample_df_with_regressors: pd.DataFrame
+    ) -> None:
+        """Prophet should raise when regressor not found in future_df."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel(
+            regressors=["is_bank_holiday", "event_importance"],
+        )
+        model.fit(sample_df_with_regressors, target="daily_logins")
+
+        future_df = pd.DataFrame({
+            "date": pd.date_range("2024-03-01", periods=7, freq="D"),
+            "is_bank_holiday": [0, 0, 0, 0, 0, 0, 0],
+            # Missing event_importance column
+        })
+
+        with pytest.raises(ValueError, match="event_importance.*not found"):
+            model.predict(horizon=7, future_df=future_df)
+
+    def test_prophet_get_params_includes_regressors(self) -> None:
+        """Prophet get_params should include regressors."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel(
+            regressors=["is_bank_holiday", "event_importance"],
+        )
+        params = model.get_params()
+
+        assert "regressors" in params
+        assert params["regressors"] == ["is_bank_holiday", "event_importance"]
+
+    def test_prophet_default_regressors_is_empty(self) -> None:
+        """Prophet should have empty regressors by default."""
+        from volume_forecast.models.prophet_model import ProphetModel
+
+        model = ProphetModel()
+        params = model.get_params()
+
+        assert "regressors" in params
+        assert params["regressors"] == []
+
+
 class TestModelRegistry:
     """Test suite for model registry."""
 
