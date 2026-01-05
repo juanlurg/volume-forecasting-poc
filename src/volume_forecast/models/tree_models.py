@@ -158,6 +158,18 @@ class LightGBMModel(BaseModel):
                 f"Expected columns: {self.external_features}"
             )
 
+        # Validate future_df column existence
+        if self.external_features and future_df is not None:
+            missing_cols = [col for col in self.external_features if col not in future_df.columns]
+            if missing_cols:
+                raise ValueError(f"Missing columns in future_df: {missing_cols}")
+
+        # Validate future_df has enough rows
+        if future_df is not None and len(future_df) < horizon:
+            raise ValueError(
+                f"future_df must have at least {horizon} rows, got {len(future_df)}"
+            )
+
         # Get historical values for lag calculation
         historical_values = list(self._train_data[self._target].values)
 
@@ -360,6 +372,18 @@ class XGBoostModel(BaseModel):
             raise ValueError(
                 "future_df required when model uses external_features. "
                 f"Expected columns: {self.external_features}"
+            )
+
+        # Validate future_df column existence
+        if self.external_features and future_df is not None:
+            missing_cols = [col for col in self.external_features if col not in future_df.columns]
+            if missing_cols:
+                raise ValueError(f"Missing columns in future_df: {missing_cols}")
+
+        # Validate future_df has enough rows
+        if future_df is not None and len(future_df) < horizon:
+            raise ValueError(
+                f"future_df must have at least {horizon} rows, got {len(future_df)}"
             )
 
         # Get historical values for lag calculation
