@@ -25,8 +25,15 @@ class ForecastModel(Protocol):
         """Fit the model to training data."""
         ...
 
-    def predict(self, horizon: int) -> pd.DataFrame:
-        """Generate predictions."""
+    def predict(
+        self, horizon: int, future_df: pd.DataFrame | None = None
+    ) -> pd.DataFrame:
+        """Generate predictions.
+
+        Args:
+            horizon: Number of periods to forecast.
+            future_df: Optional DataFrame with feature values for future dates.
+        """
         ...
 
 
