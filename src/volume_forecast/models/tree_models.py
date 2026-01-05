@@ -115,11 +115,13 @@ class LightGBMModel(BaseModel):
 
         return self
 
-    def predict(self, df: pd.DataFrame, horizon: int) -> pd.DataFrame:
+    def predict(
+        self, df: pd.DataFrame | None = None, horizon: int = 7
+    ) -> pd.DataFrame:
         """Generate recursive multi-step forecasts.
 
         Args:
-            df: DataFrame for prediction (used for date context).
+            df: Optional DataFrame for prediction (not used, kept for API compatibility).
             horizon: Number of periods to forecast.
 
         Returns:
@@ -286,11 +288,13 @@ class XGBoostModel(BaseModel):
 
         return self
 
-    def predict(self, df: pd.DataFrame, horizon: int) -> pd.DataFrame:
+    def predict(
+        self, df: pd.DataFrame | None = None, horizon: int = 7
+    ) -> pd.DataFrame:
         """Generate recursive multi-step forecasts.
 
         Args:
-            df: DataFrame for prediction (used for date context).
+            df: Optional DataFrame for prediction (not used, kept for API compatibility).
             horizon: Number of periods to forecast.
 
         Returns:
