@@ -1,10 +1,12 @@
 """Feature engineering pipeline."""
 
+from pathlib import Path
 from typing import Any, Self
 
 import pandas as pd
 
 from volume_forecast.features.base import BaseTransformer
+from volume_forecast.features.events import EventFeatures
 from volume_forecast.features.lags import LagFeatures
 from volume_forecast.features.rolling import RollingFeatures
 from volume_forecast.features.temporal import TemporalFeatures
@@ -21,6 +23,9 @@ class FeaturePipeline(BaseTransformer):
         rolling_windows: list[int] | None = None,
         rolling_stats: list[str] | None = None,
         cyclical: bool = True,
+        include_events: bool = False,
+        include_football: bool = True,
+        events_cache_dir: Path | None = None,
     ) -> None:
         """Initialize the feature pipeline.
 
@@ -31,6 +36,9 @@ class FeaturePipeline(BaseTransformer):
             rolling_windows: Rolling window sizes.
             rolling_stats: Rolling statistics to compute.
             cyclical: Whether to add cyclical temporal features.
+            include_events: Whether to add event features.
+            include_football: Whether to include football data in events.
+            events_cache_dir: Cache directory for event API responses.
         """
         super().__init__()
         self.date_column = date_column
@@ -39,6 +47,9 @@ class FeaturePipeline(BaseTransformer):
         self.rolling_windows = rolling_windows or [7, 14, 30]
         self.rolling_stats = rolling_stats or ["mean", "std"]
         self.cyclical = cyclical
+        self.include_events = include_events
+        self.include_football = include_football
+        self.events_cache_dir = events_cache_dir
 
         # Initialize transformers
         self._temporal = TemporalFeatures(
@@ -50,6 +61,13 @@ class FeaturePipeline(BaseTransformer):
             windows=self.rolling_windows,
             stats=self.rolling_stats,
         )
+        self._events: EventFeatures | None = None
+        if include_events:
+            self._events = EventFeatures(
+                date_column=date_column,
+                include_football=include_football,
+                cache_dir=events_cache_dir,
+            )
         self._all_feature_names: list[str] = []
 
     def fit(self, df: pd.DataFrame, y: pd.Series | None = None) -> Self:
@@ -65,6 +83,8 @@ class FeaturePipeline(BaseTransformer):
         self._temporal.fit(df)
         self._lags.fit(df)
         self._rolling.fit(df)
+        if self._events is not None:
+            self._events.fit(df)
         self._is_fitted = True
         return self
 
@@ -83,6 +103,8 @@ class FeaturePipeline(BaseTransformer):
         df = self._temporal.transform(df)
         df = self._lags.transform(df)
         df = self._rolling.transform(df)
+        if self._events is not None:
+            df = self._events.transform(df)
 
         # Collect feature names
         self._all_feature_names = (
@@ -90,6 +112,8 @@ class FeaturePipeline(BaseTransformer):
             + self._lags.get_feature_names()
             + self._rolling.get_feature_names()
         )
+        if self._events is not None:
+            self._all_feature_names.extend(self._events.get_feature_names())
 
         return df
 
@@ -114,4 +138,6 @@ class FeaturePipeline(BaseTransformer):
             "rolling_windows": self.rolling_windows,
             "rolling_stats": self.rolling_stats,
             "cyclical": self.cyclical,
+            "include_events": self.include_events,
+            "include_football": self.include_football,
         }

@@ -288,3 +288,17 @@ class TestFeaturePipeline:
         assert len(feature_names) > 0
         for name in feature_names:
             assert name in result.columns
+
+    def test_pipeline_includes_events(self, sample_df: pd.DataFrame) -> None:
+        """Pipeline should include event features when enabled."""
+        from volume_forecast.features.pipeline import FeaturePipeline
+
+        pipeline = FeaturePipeline(
+            date_column="date",
+            target_columns=["daily_logins"],
+            include_events=True,
+        )
+        result = pipeline.fit_transform(sample_df)
+
+        assert "is_bank_holiday" in result.columns
+        assert "event_importance" in result.columns
