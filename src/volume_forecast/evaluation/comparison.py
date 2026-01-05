@@ -58,6 +58,7 @@ class ModelBenchmark:
         df: pd.DataFrame,
         target: str,
         date_column: str = "date",
+        feature_columns: list[str] | None = None,
     ) -> pd.DataFrame:
         """Run benchmark comparison of all models.
 
@@ -68,6 +69,8 @@ class ModelBenchmark:
             df: DataFrame containing features and target.
             target: Name of the target column.
             date_column: Name of the date column.
+            feature_columns: Optional list of feature columns to pass to models.
+                If provided, future feature values will be passed to predict().
 
         Returns:
             DataFrame with columns:
@@ -86,6 +89,7 @@ class ModelBenchmark:
                 df=df,
                 target=target,
                 date_column=date_column,
+                feature_columns=feature_columns,
             )
 
             # Extract metrics from each fold
