@@ -240,9 +240,57 @@ class TestEventFeatures:
         transformer.fit_transform(sample_df)
         names = transformer.get_feature_names()
 
-        assert len(names) == 7
+        assert len(names) == 22  # 7 original + 15 lead/lag indicators
         assert "is_bank_holiday" in names
         assert "event_importance" in names
+
+    def test_lead_indicators_any_event(self, sample_df: pd.DataFrame) -> None:
+        """Should add lead indicators for upcoming events."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        result = transformer.fit_transform(sample_df)
+
+        # Dec 25 is Christmas, so Dec 24 should have any_event_tomorrow=1
+        dec_24_idx = 1  # 2024-12-24
+        assert result["any_event_tomorrow"].iloc[dec_24_idx] == 1
+
+        # Dec 23 should have any_event_in_2_days=1 (Christmas is 2 days away)
+        dec_23_idx = 0  # 2024-12-23
+        assert result["any_event_in_2_days"].iloc[dec_23_idx] == 1
+
+    def test_lead_indicators_bank_holiday(self, sample_df: pd.DataFrame) -> None:
+        """Should add bank holiday specific lead indicators."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        result = transformer.fit_transform(sample_df)
+
+        # Dec 24 should have bank_holiday_tomorrow=1 (Christmas)
+        dec_24_idx = 1
+        assert result["bank_holiday_tomorrow"].iloc[dec_24_idx] == 1
+
+    def test_lag_indicators_any_event(self, sample_df: pd.DataFrame) -> None:
+        """Should add lag indicators for past events."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        result = transformer.fit_transform(sample_df)
+
+        # Dec 26 should have any_event_yesterday=1 (Christmas was yesterday)
+        dec_26_idx = 3  # 2024-12-26
+        assert result["any_event_yesterday"].iloc[dec_26_idx] == 1
+
+    def test_lag_indicators_bank_holiday(self, sample_df: pd.DataFrame) -> None:
+        """Should add bank holiday specific lag indicators."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        result = transformer.fit_transform(sample_df)
+
+        # Dec 26 should have bank_holiday_yesterday=1 (Christmas)
+        dec_26_idx = 3
+        assert result["bank_holiday_yesterday"].iloc[dec_26_idx] == 1
 
 
 class TestFeaturePipeline:

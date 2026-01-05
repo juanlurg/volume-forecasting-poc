@@ -1,6 +1,7 @@
 """Event-based features from external data sources."""
 
 import os
+from datetime import timedelta
 from pathlib import Path
 from typing import Any, Self
 
@@ -136,6 +137,55 @@ class EventFeatures(BaseTransformer):
 
                 df.at[idx, "event_importance"] = max_importance
 
+        # Build date sets for lead/lag indicators
+        all_event_dates: set = set()
+        bank_holiday_dates: set = set()
+        football_dates: set = set()
+
+        for event in events:
+            event_date = event["date"]
+            all_event_dates.add(event_date)
+            if event.get("event_type") == "holiday":
+                bank_holiday_dates.add(event_date)
+            elif event.get("event_type") == "football":
+                football_dates.add(event_date)
+
+        # Initialize lead/lag indicator columns
+        lead_lag_cols = [
+            "any_event_tomorrow", "any_event_in_2_days", "any_event_in_3_days",
+            "bank_holiday_tomorrow", "bank_holiday_in_2_days", "bank_holiday_in_3_days",
+            "football_tomorrow", "football_in_2_days", "football_in_3_days",
+            "any_event_yesterday", "any_event_2_days_ago",
+            "bank_holiday_yesterday", "bank_holiday_2_days_ago",
+            "football_yesterday", "football_2_days_ago",
+        ]
+        for col in lead_lag_cols:
+            df[col] = 0
+
+        # Populate lead/lag indicators
+        for idx, row in df.iterrows():
+            row_date = pd.to_datetime(row[self.date_column]).date()
+
+            # Lead indicators (upcoming events)
+            for days_ahead, suffix in [(1, "tomorrow"), (2, "in_2_days"), (3, "in_3_days")]:
+                future_date = row_date + timedelta(days=days_ahead)
+                if future_date in all_event_dates:
+                    df.at[idx, f"any_event_{suffix}"] = 1
+                if future_date in bank_holiday_dates:
+                    df.at[idx, f"bank_holiday_{suffix}"] = 1
+                if future_date in football_dates:
+                    df.at[idx, f"football_{suffix}"] = 1
+
+            # Lag indicators (past events)
+            for days_ago, suffix in [(1, "yesterday"), (2, "2_days_ago")]:
+                past_date = row_date - timedelta(days=days_ago)
+                if past_date in all_event_dates:
+                    df.at[idx, f"any_event_{suffix}"] = 1
+                if past_date in bank_holiday_dates:
+                    df.at[idx, f"bank_holiday_{suffix}"] = 1
+                if past_date in football_dates:
+                    df.at[idx, f"football_{suffix}"] = 1
+
         self._feature_names = [
             "is_bank_holiday",
             "is_racing_event",
@@ -144,6 +194,14 @@ class EventFeatures(BaseTransformer):
             "is_football_match",
             "event_importance",
             "event_count",
+            # Lead indicators
+            "any_event_tomorrow", "any_event_in_2_days", "any_event_in_3_days",
+            "bank_holiday_tomorrow", "bank_holiday_in_2_days", "bank_holiday_in_3_days",
+            "football_tomorrow", "football_in_2_days", "football_in_3_days",
+            # Lag indicators
+            "any_event_yesterday", "any_event_2_days_ago",
+            "bank_holiday_yesterday", "bank_holiday_2_days_ago",
+            "football_yesterday", "football_2_days_ago",
         ]
 
         return df
