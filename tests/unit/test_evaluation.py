@@ -579,3 +579,44 @@ class TestModelComparison:
 
         with pytest.raises(ValueError, match="benchmark"):
             benchmark.get_results_summary()
+
+
+class TestWalkForwardValidatorWithFeatures:
+    """Test WalkForwardValidator with feature_columns parameter."""
+
+    def test_validator_passes_feature_df(self) -> None:
+        """Validator should pass feature data to models that need it."""
+        from volume_forecast.evaluation.validation import WalkForwardValidator
+
+        # Create mock model that tracks if it received feature data
+        class MockModelWithFeatures:
+            def __init__(self):
+                self.received_future_df = False
+
+            def fit(self, train_df, target):
+                return self
+
+            def predict(self, horizon, future_df=None):
+                if future_df is not None:
+                    self.received_future_df = True
+                return pd.DataFrame({
+                    "date": pd.date_range("2024-06-01", periods=horizon),
+                    "prediction": [100] * horizon,
+                })
+
+        df = pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=400, freq="D"),
+            "daily_logins": range(400),
+            "feature_col": range(400),
+        })
+
+        validator = WalkForwardValidator(min_train_size=365, test_size=7)
+        model = MockModelWithFeatures()
+
+        # Run validation with feature columns specified
+        results = validator.validate(
+            model, df, target="daily_logins",
+            feature_columns=["feature_col"],
+        )
+
+        assert model.received_future_df

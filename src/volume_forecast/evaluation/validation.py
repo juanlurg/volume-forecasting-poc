@@ -141,6 +141,7 @@ class WalkForwardValidator:
         df: pd.DataFrame,
         target: str,
         date_column: str = "date",
+        feature_columns: list[str] | None = None,
     ) -> list[dict[str, Any]]:
         """Run walk-forward validation on a model.
 
@@ -154,6 +155,8 @@ class WalkForwardValidator:
             df: DataFrame containing features and target.
             target: Name of the target column.
             date_column: Name of the date column.
+            feature_columns: Optional list of feature columns to pass to model.
+                If provided, future feature values will be passed to predict().
 
         Returns:
             List of dictionaries, one per fold, containing:
@@ -167,8 +170,20 @@ class WalkForwardValidator:
             # Fit model on training data
             model.fit(train_df, target)
 
-            # Generate predictions
-            predictions_df = model.predict(horizon=self.test_size)
+            # Prepare future_df if feature columns are specified
+            future_df = None
+            if feature_columns:
+                future_df = test_df[[date_column] + list(feature_columns)].copy()
+
+            # Generate predictions - try with future_df first, fall back to without
+            try:
+                if future_df is not None:
+                    predictions_df = model.predict(horizon=self.test_size, future_df=future_df)
+                else:
+                    predictions_df = model.predict(horizon=self.test_size)
+            except TypeError:
+                # Model doesn't accept future_df parameter
+                predictions_df = model.predict(horizon=self.test_size)
 
             # Get actual values
             y_true = test_df[target].values
