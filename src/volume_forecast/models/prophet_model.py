@@ -138,6 +138,12 @@ class ProphetModel(BaseModel):
                 f"Expected columns: {self._regressors}"
             )
 
+        # Validate future_df has enough rows
+        if future_df is not None and len(future_df) < horizon:
+            raise ValueError(
+                f"future_df must have at least {horizon} rows, got {len(future_df)}"
+            )
+
         # Create future dataframe starting from day after last training date
         future_dates = pd.date_range(
             start=self._last_date + pd.Timedelta(days=1),
