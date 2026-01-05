@@ -170,6 +170,81 @@ class TestRollingFeatures:
         assert "daily_logins_rolling_std_7" in result.columns
 
 
+class TestEventFeatures:
+    """Test suite for event features."""
+
+    @pytest.fixture
+    def sample_df(self) -> pd.DataFrame:
+        """Create sample DataFrame with dates spanning known events."""
+        # Include dates around Christmas 2024 (UK bank holidays available from 2024)
+        return pd.DataFrame({
+            "date": pd.date_range("2024-12-23", periods=10, freq="D"),
+            "value": range(10),
+        })
+
+    def test_adds_is_bank_holiday(self, sample_df: pd.DataFrame) -> None:
+        """Should add is_bank_holiday feature."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        result = transformer.fit_transform(sample_df)
+
+        assert "is_bank_holiday" in result.columns
+        # Dec 25 (Christmas 2024) should be a holiday
+        christmas_idx = 2  # 2024-12-25
+        assert result["is_bank_holiday"].iloc[christmas_idx] == 1
+
+    def test_adds_event_type_flags(self, sample_df: pd.DataFrame) -> None:
+        """Should add event type flag columns."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        result = transformer.fit_transform(sample_df)
+
+        expected_cols = [
+            "is_bank_holiday",
+            "is_racing_event",
+            "is_tennis_event",
+            "is_boxing_event",
+            "is_football_match",
+        ]
+        for col in expected_cols:
+            assert col in result.columns
+
+    def test_adds_event_importance(self, sample_df: pd.DataFrame) -> None:
+        """Should add event_importance numeric column."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        result = transformer.fit_transform(sample_df)
+
+        assert "event_importance" in result.columns
+        # Christmas 2024 should have major importance (4)
+        christmas_idx = 2
+        assert result["event_importance"].iloc[christmas_idx] == 4
+
+    def test_adds_event_count(self, sample_df: pd.DataFrame) -> None:
+        """Should add event_count column."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        result = transformer.fit_transform(sample_df)
+
+        assert "event_count" in result.columns
+
+    def test_get_feature_names(self, sample_df: pd.DataFrame) -> None:
+        """Should return list of generated feature names."""
+        from volume_forecast.features.events import EventFeatures
+
+        transformer = EventFeatures(date_column="date")
+        transformer.fit_transform(sample_df)
+        names = transformer.get_feature_names()
+
+        assert len(names) == 7
+        assert "is_bank_holiday" in names
+        assert "event_importance" in names
+
+
 class TestFeaturePipeline:
     """Test suite for feature pipeline."""
 
