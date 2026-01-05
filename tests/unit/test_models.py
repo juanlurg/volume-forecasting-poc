@@ -1103,6 +1103,157 @@ class TestEnsembleModel:
             EnsembleModel(models=[naive, ma], weights=[0.5, 0.3])
 
 
+class TestTreeModelsWithFeatures:
+    """Test tree models with external features."""
+
+    @pytest.fixture
+    def sample_df_with_features(self) -> pd.DataFrame:
+        """Create sample DataFrame with external features."""
+        df = pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=60, freq="D"),
+            "daily_logins": range(1000, 1060),
+            "day_of_week": [i % 7 for i in range(60)],
+            "is_weekend": [1 if i % 7 >= 5 else 0 for i in range(60)],
+            "event_importance": [0] * 50 + [3] * 10,  # Last 10 days have events
+        })
+        return df
+
+    @lightgbm_available
+    def test_lightgbm_uses_external_features(
+        self, sample_df_with_features: pd.DataFrame
+    ) -> None:
+        """LightGBM should use external features when provided."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel(
+            external_features=["day_of_week", "is_weekend", "event_importance"],
+            lags=[1, 7],
+        )
+        model.fit(sample_df_with_features, target="daily_logins")
+
+        # Should not raise
+        assert model._model is not None
+
+    def test_xgboost_uses_external_features(
+        self, sample_df_with_features: pd.DataFrame
+    ) -> None:
+        """XGBoost should use external features when provided."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel(
+            external_features=["day_of_week", "is_weekend", "event_importance"],
+            lags=[1, 7],
+        )
+        model.fit(sample_df_with_features, target="daily_logins")
+
+        assert model._model is not None
+
+    @lightgbm_available
+    def test_lightgbm_predict_with_future_features(
+        self, sample_df_with_features: pd.DataFrame
+    ) -> None:
+        """LightGBM should accept future_df for prediction."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel(
+            external_features=["day_of_week", "is_weekend", "event_importance"],
+            lags=[1, 7],
+        )
+        model.fit(sample_df_with_features, target="daily_logins")
+
+        # Create future features
+        future_df = pd.DataFrame({
+            "date": pd.date_range("2024-03-01", periods=7, freq="D"),
+            "day_of_week": [4, 5, 6, 0, 1, 2, 3],
+            "is_weekend": [0, 1, 1, 0, 0, 0, 0],
+            "event_importance": [0, 0, 0, 0, 0, 0, 0],
+        })
+
+        predictions = model.predict(horizon=7, future_df=future_df)
+        assert len(predictions) == 7
+        assert "prediction" in predictions.columns
+
+    def test_xgboost_predict_with_future_features(
+        self, sample_df_with_features: pd.DataFrame
+    ) -> None:
+        """XGBoost should accept future_df for prediction."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel(
+            external_features=["day_of_week", "is_weekend", "event_importance"],
+            lags=[1, 7],
+        )
+        model.fit(sample_df_with_features, target="daily_logins")
+
+        # Create future features
+        future_df = pd.DataFrame({
+            "date": pd.date_range("2024-03-01", periods=7, freq="D"),
+            "day_of_week": [4, 5, 6, 0, 1, 2, 3],
+            "is_weekend": [0, 1, 1, 0, 0, 0, 0],
+            "event_importance": [0, 0, 0, 0, 0, 0, 0],
+        })
+
+        predictions = model.predict(horizon=7, future_df=future_df)
+        assert len(predictions) == 7
+        assert "prediction" in predictions.columns
+
+    @lightgbm_available
+    def test_lightgbm_get_params_includes_external_features(self) -> None:
+        """LightGBM get_params should include external_features."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel(
+            external_features=["day_of_week", "is_weekend"],
+        )
+        params = model.get_params()
+
+        assert "external_features" in params
+        assert params["external_features"] == ["day_of_week", "is_weekend"]
+
+    def test_xgboost_get_params_includes_external_features(self) -> None:
+        """XGBoost get_params should include external_features."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel(
+            external_features=["day_of_week", "is_weekend"],
+        )
+        params = model.get_params()
+
+        assert "external_features" in params
+        assert params["external_features"] == ["day_of_week", "is_weekend"]
+
+    @lightgbm_available
+    def test_lightgbm_raises_without_future_df(
+        self, sample_df_with_features: pd.DataFrame
+    ) -> None:
+        """LightGBM should raise when external_features used but no future_df."""
+        from volume_forecast.models.tree_models import LightGBMModel
+
+        model = LightGBMModel(
+            external_features=["day_of_week", "is_weekend", "event_importance"],
+            lags=[1, 7],
+        )
+        model.fit(sample_df_with_features, target="daily_logins")
+
+        with pytest.raises(ValueError, match="future_df required"):
+            model.predict(horizon=7)
+
+    def test_xgboost_raises_without_future_df(
+        self, sample_df_with_features: pd.DataFrame
+    ) -> None:
+        """XGBoost should raise when external_features used but no future_df."""
+        from volume_forecast.models.tree_models import XGBoostModel
+
+        model = XGBoostModel(
+            external_features=["day_of_week", "is_weekend", "event_importance"],
+            lags=[1, 7],
+        )
+        model.fit(sample_df_with_features, target="daily_logins")
+
+        with pytest.raises(ValueError, match="future_df required"):
+            model.predict(horizon=7)
+
+
 class TestModelRegistry:
     """Test suite for model registry."""
 
