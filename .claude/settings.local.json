@@ -30,7 +30,12 @@
       "Bash(\".venv\\\\Scripts\\\\python.exe\" -m pytest tests/ -v --tb=short)",
       "Bash(git -C \"C:\\\\Users\\\\juanlu\\\\dev\\\\volume-forecasting-poc\" status)",
       "Bash(git -C \"C:\\\\Users\\\\juanlu\\\\dev\\\\volume-forecasting-poc\" diff src/volume_forecast/evaluation/validation.py)",
-      "Skill(superpowers:finishing-a-development-branch)"
+      "Skill(superpowers:finishing-a-development-branch)",
+      "WebSearch",
+      "Bash(.venv/Scripts/python.exe:*)",
+      "Bash(git -C \"C:\\\\Users\\\\juanlu\\\\dev\\\\volume-forecasting-poc\" add src/volume_forecast/external_data/static_events.py)",
+      "Bash(git -C \"C:\\\\Users\\\\juanlu\\\\dev\\\\volume-forecasting-poc\" commit -m \"$\\(cat <<''EOF''\nfeat: add exact dates for sporting events 2023-2025\n\nReplace approximate dates with verified exact dates for:\n- Horse racing: Cheltenham, Grand National, Royal Ascot, King George VI\n- Tennis: Australian Open, French Open, Wimbledon, US Open\n- Boxing: Major UK heavyweight fights \\(Joshua, Fury, Usyk\\)\n\nFalls back to approximate dates for years outside 2023-2025.\n\n🤖 Generated with [Claude Code]\\(https://claude.com/claude-code\\)\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git -C \"C:\\\\Users\\\\juanlu\\\\dev\\\\volume-forecasting-poc\" push)"
     ]
   }
 }
