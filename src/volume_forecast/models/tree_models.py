@@ -1,6 +1,8 @@
-"""Tree-based forecasting models (LightGBM, XGBoost)."""
+"""Tree-based forecasting models (LightGBM, XGBoost).
 
-from __future__ import annotations
+This module provides tree-based machine learning models for time series
+forecasting, including LightGBM and XGBoost implementations.
+"""
 
 from typing import Any, Self
 
@@ -18,7 +20,7 @@ class LightGBMModel(BaseModel):
 
     Attributes:
         n_estimators: Number of boosting rounds.
-        max_depth: Maximum tree depth (-1 for unlimited).
+        max_depth: Maximum tree depth (-1 means no limit).
         learning_rate: Boosting learning rate.
         lags: List of lag periods for feature creation.
         external_features: List of external feature column names.
@@ -32,16 +34,18 @@ class LightGBMModel(BaseModel):
         lags: list[int] | None = None,
         external_features: list[str] | None = None,
         name: str = "lightgbm",
+        **kwargs: Any,
     ) -> None:
         """Initialize the LightGBM model.
 
         Args:
             n_estimators: Number of boosting rounds.
-            max_depth: Maximum tree depth (-1 for unlimited).
+            max_depth: Maximum tree depth (-1 means no limit).
             learning_rate: Boosting learning rate.
             lags: List of lag periods for feature creation (default: [1, 7, 14]).
             external_features: List of external feature columns to use.
             name: Name of the model.
+            **kwargs: Additional parameters passed to LGBMRegressor (e.g., num_leaves).
         """
         super().__init__(name)
         self.n_estimators = n_estimators
@@ -49,6 +53,7 @@ class LightGBMModel(BaseModel):
         self.learning_rate = learning_rate
         self.lags = lags if lags is not None else [1, 7, 14]
         self.external_features = external_features or []
+        self._model_kwargs = kwargs
         self._model: Any = None
         self._target: str | None = None
         self._train_data: pd.DataFrame | None = None
@@ -106,10 +111,12 @@ class LightGBMModel(BaseModel):
         # Validate external features exist
         for col in self.external_features:
             if col not in df_with_features.columns:
-                raise ValueError(f"External feature '{col}' not found in training data")
+                raise ValueError(
+                    f"External feature '{col}' not found in training data"
+                )
 
-        # Drop rows with NaN (from lag creation)
-        df_clean = df_with_features.dropna(subset=lag_columns)
+        # Drop rows with NaN values (from lag features)
+        df_clean = df_with_features.dropna(subset=self._feature_columns)
 
         X = df_clean[self._feature_columns].values
         y = df_clean[target].values
@@ -122,7 +129,8 @@ class LightGBMModel(BaseModel):
             n_estimators=self.n_estimators,
             max_depth=self.max_depth,
             learning_rate=self.learning_rate,
-            verbosity=-1,
+            verbose=-1,
+            **self._model_kwargs,
         )
         self._model.fit(X, y)
 
@@ -130,62 +138,61 @@ class LightGBMModel(BaseModel):
 
     def predict(
         self,
-        df: pd.DataFrame | None = None,
         horizon: int = 7,
         future_df: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
-        """Generate recursive multi-step forecasts.
+        """Generate predictions for future time periods.
 
         Args:
-            df: Optional DataFrame for prediction (not used, kept for API compatibility).
             horizon: Number of periods to forecast.
-            future_df: DataFrame with external features for future dates.
-                Required if external_features were used in training.
+            future_df: Optional DataFrame with feature values for future dates.
+                Must contain the date column and external feature columns if used.
 
         Returns:
             DataFrame with 'date' and 'prediction' columns.
 
         Raises:
-            ValueError: If model hasn't been fit or future_df missing when needed.
+            ValueError: If the model hasn't been fitted.
         """
-        if self._model is None:
-            raise ValueError("Model must be fit before calling predict.")
+        if self._model is None or self._train_data is None:
+            raise ValueError("Model must be fitted before predicting.")
+        if self._target is None or self._last_train_date is None:
+            raise ValueError("Model must be fitted before predicting.")
 
-        # Check if we need future features
+        # Validate future_df if external features are used
         if self.external_features and future_df is None:
             raise ValueError(
-                "future_df required when model uses external_features. "
-                f"Expected columns: {self.external_features}"
+                "future_df required when model uses external features"
             )
-
-        # Validate future_df column existence
         if self.external_features and future_df is not None:
-            missing_cols = [col for col in self.external_features if col not in future_df.columns]
-            if missing_cols:
-                raise ValueError(f"Missing columns in future_df: {missing_cols}")
+            if len(future_df) < horizon:
+                raise ValueError(
+                    f"future_df must have at least {horizon} rows for the forecast horizon"
+                )
+            for col in self.external_features:
+                if col not in future_df.columns:
+                    raise ValueError(
+                        f"External feature '{col}' not found in future_df"
+                    )
 
-        # Validate future_df has enough rows
-        if future_df is not None and len(future_df) < horizon:
-            raise ValueError(
-                f"future_df must have at least {horizon} rows, got {len(future_df)}"
-            )
-
-        # Get historical values for lag calculation
-        historical_values = list(self._train_data[self._target].values)
-
-        # Generate prediction dates starting from day after last training date
+        # Generate prediction dates
         prediction_dates = pd.date_range(
             start=self._last_train_date + pd.Timedelta(days=1),
             periods=horizon,
             freq="D",
         )
 
+        # Use historical values for lag features
+        historical_values = self._train_data[self._target].tolist()
+
         predictions = []
         for step in range(horizon):
-            # Create lag features from historical + predicted values
+            # Build features for this prediction step
             feature_values = []
+
+            # Add lag features
             for lag in self.lags:
-                if lag <= len(historical_values):
+                if len(historical_values) >= lag:
                     feature_values.append(historical_values[-lag])
                 else:
                     # Use earliest available value if not enough history
@@ -222,6 +229,7 @@ class LightGBMModel(BaseModel):
             "learning_rate": self.learning_rate,
             "lags": self.lags,
             "external_features": self.external_features,
+            **self._model_kwargs,
         })
         return params
 
@@ -248,6 +256,7 @@ class XGBoostModel(BaseModel):
         lags: list[int] | None = None,
         external_features: list[str] | None = None,
         name: str = "xgboost",
+        **kwargs: Any,
     ) -> None:
         """Initialize the XGBoost model.
 
@@ -258,6 +267,7 @@ class XGBoostModel(BaseModel):
             lags: List of lag periods for feature creation (default: [1, 7, 14]).
             external_features: List of external feature columns to use.
             name: Name of the model.
+            **kwargs: Additional parameters passed to XGBRegressor (e.g., min_child_weight).
         """
         super().__init__(name)
         self.n_estimators = n_estimators
@@ -265,6 +275,7 @@ class XGBoostModel(BaseModel):
         self.learning_rate = learning_rate
         self.lags = lags if lags is not None else [1, 7, 14]
         self.external_features = external_features or []
+        self._model_kwargs = kwargs
         self._model: Any = None
         self._target: str | None = None
         self._train_data: pd.DataFrame | None = None
@@ -322,10 +333,12 @@ class XGBoostModel(BaseModel):
         # Validate external features exist
         for col in self.external_features:
             if col not in df_with_features.columns:
-                raise ValueError(f"External feature '{col}' not found in training data")
+                raise ValueError(
+                    f"External feature '{col}' not found in training data"
+                )
 
-        # Drop rows with NaN (from lag creation)
-        df_clean = df_with_features.dropna(subset=lag_columns)
+        # Drop rows with NaN values (from lag features)
+        df_clean = df_with_features.dropna(subset=self._feature_columns)
 
         X = df_clean[self._feature_columns].values
         y = df_clean[target].values
@@ -339,6 +352,7 @@ class XGBoostModel(BaseModel):
             max_depth=self.max_depth,
             learning_rate=self.learning_rate,
             verbosity=0,
+            **self._model_kwargs,
         )
         self._model.fit(X, y)
 
@@ -346,62 +360,61 @@ class XGBoostModel(BaseModel):
 
     def predict(
         self,
-        df: pd.DataFrame | None = None,
         horizon: int = 7,
         future_df: pd.DataFrame | None = None,
     ) -> pd.DataFrame:
-        """Generate recursive multi-step forecasts.
+        """Generate predictions for future time periods.
 
         Args:
-            df: Optional DataFrame for prediction (not used, kept for API compatibility).
             horizon: Number of periods to forecast.
-            future_df: DataFrame with external features for future dates.
-                Required if external_features were used in training.
+            future_df: Optional DataFrame with feature values for future dates.
+                Must contain the date column and external feature columns if used.
 
         Returns:
             DataFrame with 'date' and 'prediction' columns.
 
         Raises:
-            ValueError: If model hasn't been fit or future_df missing when needed.
+            ValueError: If the model hasn't been fitted.
         """
-        if self._model is None:
-            raise ValueError("Model must be fit before calling predict.")
+        if self._model is None or self._train_data is None:
+            raise ValueError("Model must be fitted before predicting.")
+        if self._target is None or self._last_train_date is None:
+            raise ValueError("Model must be fitted before predicting.")
 
-        # Check if we need future features
+        # Validate future_df if external features are used
         if self.external_features and future_df is None:
             raise ValueError(
-                "future_df required when model uses external_features. "
-                f"Expected columns: {self.external_features}"
+                "future_df required when model uses external features"
             )
-
-        # Validate future_df column existence
         if self.external_features and future_df is not None:
-            missing_cols = [col for col in self.external_features if col not in future_df.columns]
-            if missing_cols:
-                raise ValueError(f"Missing columns in future_df: {missing_cols}")
+            if len(future_df) < horizon:
+                raise ValueError(
+                    f"future_df must have at least {horizon} rows for the forecast horizon"
+                )
+            for col in self.external_features:
+                if col not in future_df.columns:
+                    raise ValueError(
+                        f"External feature '{col}' not found in future_df"
+                    )
 
-        # Validate future_df has enough rows
-        if future_df is not None and len(future_df) < horizon:
-            raise ValueError(
-                f"future_df must have at least {horizon} rows, got {len(future_df)}"
-            )
-
-        # Get historical values for lag calculation
-        historical_values = list(self._train_data[self._target].values)
-
-        # Generate prediction dates starting from day after last training date
+        # Generate prediction dates
         prediction_dates = pd.date_range(
             start=self._last_train_date + pd.Timedelta(days=1),
             periods=horizon,
             freq="D",
         )
 
+        # Use historical values for lag features
+        historical_values = self._train_data[self._target].tolist()
+
         predictions = []
         for step in range(horizon):
-            # Create lag features from historical + predicted values
+            # Build features for this prediction step
             feature_values = []
+
+            # Add lag features
             for lag in self.lags:
-                if lag <= len(historical_values):
+                if len(historical_values) >= lag:
                     feature_values.append(historical_values[-lag])
                 else:
                     # Use earliest available value if not enough history
@@ -438,5 +451,6 @@ class XGBoostModel(BaseModel):
             "learning_rate": self.learning_rate,
             "lags": self.lags,
             "external_features": self.external_features,
+            **self._model_kwargs,
         })
         return params

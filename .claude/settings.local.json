@@ -1,0 +1,36 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git push)",
+      "Skill(superpowers:brainstorming)",
+      "Bash(cat:*)",
+      "Skill(superpowers:writing-plans)",
+      "Skill(superpowers:subagent-driven-development)",
+      "Bash(git rev-parse:*)",
+      "Bash(python -m pytest:*)",
+      "Bash(py -m pytest:*)",
+      "Bash(uv run pytest:*)",
+      "Bash(uv run python:*)",
+      "Bash(dir:*)",
+      "Bash(python:*)",
+      "Bash(python3:*)",
+      "Bash(poetry run python:*)",
+      "Bash(git diff:*)",
+      "Bash(py -3 -m pytest:*)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/unit/test_features.py::TestFeaturePipeline::test_pipeline_includes_events -v)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/unit/test_features.py -v)",
+      "Bash(C:UsersjuanluAppDataLocalMicrosoftWindowsAppspython3.exe -m pytest tests/unit/test_models.py::TestTreeModelsWithFeatures -v)",
+      "Bash(/c/Users/juanlu/AppData/Local/Microsoft/WindowsApps/python3.exe -m pytest:*)",
+      "Bash(.venv/Scripts/python.exe -m pytest tests/unit/test_models.py::TestTreeModelsWithFeatures -v)",
+      "Bash(.venv/Scripts/python.exe -m pytest:*)",
+      "Bash(.venvScriptspython.exe -m pytest tests/unit/test_models.py -v)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m pytest tests/unit/test_models.py -v)",
+      "Bash(\".venv\\\\Scripts\\\\python.exe\" -m pytest tests/ -v --tb=short)",
+      "Bash(git -C \"C:\\\\Users\\\\juanlu\\\\dev\\\\volume-forecasting-poc\" status)",
+      "Bash(git -C \"C:\\\\Users\\\\juanlu\\\\dev\\\\volume-forecasting-poc\" diff src/volume_forecast/evaluation/validation.py)",
+      "Skill(superpowers:finishing-a-development-branch)"
+    ]
+  }
+}

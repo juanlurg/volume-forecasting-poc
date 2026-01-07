@@ -574,24 +574,24 @@ class TestTreeModels:
         assert params["lags"] == [1, 7, 14]
 
     @lightgbm_available
-    def test_lightgbm_model_raises_before_fit(self, predict_df: pd.DataFrame) -> None:
+    def test_lightgbm_model_raises_before_fit(self) -> None:
         """predict() should raise if model hasn't been fit."""
         from volume_forecast.models.tree_models import LightGBMModel
 
         model = LightGBMModel()
         with pytest.raises(ValueError, match="fit"):
-            model.predict(predict_df, horizon=7)
+            model.predict(horizon=7)
 
     @lightgbm_available
     def test_lightgbm_model_predictions_are_numeric(
-        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+        self, simple_train_df: pd.DataFrame
     ) -> None:
         """Predictions should be numeric values."""
         from volume_forecast.models.tree_models import LightGBMModel
 
         model = LightGBMModel()
         model.fit(simple_train_df, target="daily_logins")
-        predictions = model.predict(predict_df, horizon=7)
+        predictions = model.predict(horizon=7)
 
         # Check predictions are numeric
         assert predictions["prediction"].dtype in [float, "float64", "float32"]
@@ -617,14 +617,14 @@ class TestTreeModels:
         assert result is model
 
     def test_xgboost_model_predict_returns_dataframe(
-        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+        self, simple_train_df: pd.DataFrame
     ) -> None:
         """predict() should return DataFrame with date and prediction columns."""
         from volume_forecast.models.tree_models import XGBoostModel
 
         model = XGBoostModel()
         model.fit(simple_train_df, target="daily_logins")
-        predictions = model.predict(predict_df, horizon=7)
+        predictions = model.predict(horizon=7)
 
         assert isinstance(predictions, pd.DataFrame)
         assert "date" in predictions.columns
@@ -632,14 +632,14 @@ class TestTreeModels:
         assert len(predictions) == 7
 
     def test_xgboost_model_prediction_dates_are_sequential(
-        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+        self, simple_train_df: pd.DataFrame
     ) -> None:
         """Prediction dates should start after training data and be sequential."""
         from volume_forecast.models.tree_models import XGBoostModel
 
         model = XGBoostModel()
         model.fit(simple_train_df, target="daily_logins")
-        predictions = model.predict(predict_df, horizon=7)
+        predictions = model.predict(horizon=7)
 
         # First prediction should be day after last training date
         last_train_date = simple_train_df["date"].iloc[-1]
@@ -684,23 +684,23 @@ class TestTreeModels:
         assert params["learning_rate"] == 0.1
         assert params["lags"] == [1, 7, 14]
 
-    def test_xgboost_model_raises_before_fit(self, predict_df: pd.DataFrame) -> None:
+    def test_xgboost_model_raises_before_fit(self) -> None:
         """predict() should raise if model hasn't been fit."""
         from volume_forecast.models.tree_models import XGBoostModel
 
         model = XGBoostModel()
         with pytest.raises(ValueError, match="fit"):
-            model.predict(predict_df, horizon=7)
+            model.predict(horizon=7)
 
     def test_xgboost_model_predictions_are_numeric(
-        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+        self, simple_train_df: pd.DataFrame
     ) -> None:
         """Predictions should be numeric values."""
         from volume_forecast.models.tree_models import XGBoostModel
 
         model = XGBoostModel()
         model.fit(simple_train_df, target="daily_logins")
-        predictions = model.predict(predict_df, horizon=7)
+        predictions = model.predict(horizon=7)
 
         # Check predictions are numeric
         assert predictions["prediction"].dtype in [float, "float64", "float32"]
@@ -709,28 +709,28 @@ class TestTreeModels:
 
     @lightgbm_available
     def test_lightgbm_with_custom_lags(
-        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+        self, simple_train_df: pd.DataFrame
     ) -> None:
         """LightGBM should work with custom lag settings."""
         from volume_forecast.models.tree_models import LightGBMModel
 
         model = LightGBMModel(lags=[1, 2, 3])
         model.fit(simple_train_df, target="daily_logins")
-        predictions = model.predict(predict_df, horizon=7)
+        predictions = model.predict(horizon=7)
 
         assert len(predictions) == 7
         params = model.get_params()
         assert params["lags"] == [1, 2, 3]
 
     def test_xgboost_with_custom_lags(
-        self, simple_train_df: pd.DataFrame, predict_df: pd.DataFrame
+        self, simple_train_df: pd.DataFrame
     ) -> None:
         """XGBoost should work with custom lag settings."""
         from volume_forecast.models.tree_models import XGBoostModel
 
         model = XGBoostModel(lags=[1, 2, 3])
         model.fit(simple_train_df, target="daily_logins")
-        predictions = model.predict(predict_df, horizon=7)
+        predictions = model.predict(horizon=7)
 
         assert len(predictions) == 7
         params = model.get_params()
@@ -994,18 +994,18 @@ class TestEnsembleModel:
         expected_prediction = 0.7 * 260 + 0.3 * 230
         assert all(predictions["prediction"] == expected_prediction)
 
-    def test_ensemble_equal_weights(
+    def test_ensemble_equal_weights_explicit(
         self, sample_train_df: pd.DataFrame
     ) -> None:
-        """With equal weights (None), should be simple average."""
+        """With equal weighting, should be simple average."""
         from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
         from volume_forecast.models.ensemble import EnsembleModel
 
         naive = NaiveModel()  # Predicts 260
         ma = MovingAverageModel(window=7)  # Predicts 230
 
-        # No weights means equal weights (0.5 each)
-        ensemble = EnsembleModel(models=[naive, ma])
+        # Explicitly set equal weighting
+        ensemble = EnsembleModel(models=[naive, ma], weighting="equal")
         ensemble.fit(sample_train_df, target="daily_logins")
         predictions = ensemble.predict(horizon=3)
 
@@ -1101,6 +1101,56 @@ class TestEnsembleModel:
         # Weights that don't sum to 1.0 should raise
         with pytest.raises(ValueError, match="sum"):
             EnsembleModel(models=[naive, ma], weights=[0.5, 0.3])
+
+    def test_ensemble_inverse_mae_weighting(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """Inverse MAE weighting should compute weights from model performance."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel(window=7)
+        ensemble = EnsembleModel(models=[naive, ma], weighting="inverse_mae")
+        ensemble.fit(sample_train_df, target="daily_logins")
+
+        # Weights should be computed and sum to 1
+        weights = ensemble.get_weights()
+        assert len(weights) == 2
+        assert abs(sum(weights.values()) - 1.0) < 1e-6
+
+    def test_ensemble_equal_weighting(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """Equal weighting should give all models equal weight."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel(window=7)
+        ensemble = EnsembleModel(models=[naive, ma], weighting="equal")
+        ensemble.fit(sample_train_df, target="daily_logins")
+
+        weights = ensemble.get_weights()
+        assert weights["naive"] == 0.5
+        assert weights["moving_average"] == 0.5
+
+    def test_ensemble_get_weights(
+        self, sample_train_df: pd.DataFrame
+    ) -> None:
+        """get_weights() should return dict mapping model names to weights."""
+        from volume_forecast.models.baselines import MovingAverageModel, NaiveModel
+        from volume_forecast.models.ensemble import EnsembleModel
+
+        naive = NaiveModel()
+        ma = MovingAverageModel()
+        weights = [0.7, 0.3]
+        ensemble = EnsembleModel(models=[naive, ma], weights=weights)
+        ensemble.fit(sample_train_df, target="daily_logins")
+
+        weight_dict = ensemble.get_weights()
+        assert weight_dict["naive"] == 0.7
+        assert weight_dict["moving_average"] == 0.3
 
 
 class TestTreeModelsWithFeatures:

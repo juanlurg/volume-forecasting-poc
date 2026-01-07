@@ -36,6 +36,7 @@ class ProphetModel(BaseModel):
         daily_seasonality: bool = False,
         regressors: list[str] | None = None,
         name: str = "prophet",
+        **kwargs: Any,
     ) -> None:
         """Initialize the ProphetModel.
 
@@ -45,12 +46,15 @@ class ProphetModel(BaseModel):
             daily_seasonality: Whether to include daily seasonality.
             regressors: List of external regressor column names.
             name: The name of the model.
+            **kwargs: Additional parameters passed to Prophet (e.g., seasonality_prior_scale,
+                changepoint_prior_scale, n_changepoints, changepoint_range, seasonality_mode).
         """
         super().__init__(name)
         self._yearly_seasonality = yearly_seasonality
         self._weekly_seasonality = weekly_seasonality
         self._daily_seasonality = daily_seasonality
         self._regressors = regressors or []
+        self._model_kwargs = kwargs
         self._model: Prophet | None = None
         self._last_date: pd.Timestamp | None = None
 
@@ -97,6 +101,7 @@ class ProphetModel(BaseModel):
             yearly_seasonality=self._yearly_seasonality,
             weekly_seasonality=self._weekly_seasonality,
             daily_seasonality=self._daily_seasonality,
+            **self._model_kwargs,
         )
 
         # Add regressors before fitting
@@ -180,4 +185,5 @@ class ProphetModel(BaseModel):
         params["weekly_seasonality"] = self._weekly_seasonality
         params["daily_seasonality"] = self._daily_seasonality
         params["regressors"] = self._regressors
+        params.update(self._model_kwargs)
         return params
