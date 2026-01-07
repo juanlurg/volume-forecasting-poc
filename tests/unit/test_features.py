@@ -350,3 +350,37 @@ class TestFeaturePipeline:
 
         assert "is_bank_holiday" in result.columns
         assert "event_importance" in result.columns
+
+    def test_pipeline_with_registrations(self) -> None:
+        """Pipeline should create features for registrations when included."""
+        from volume_forecast.features.pipeline import FeaturePipeline
+
+        df = pd.DataFrame({
+            "date": pd.date_range("2024-01-01", periods=60, freq="D"),
+            "daily_logins": range(1000, 1060),
+            "daily_deposits": range(100, 160),
+            "daily_registrations": range(50, 110),
+        })
+
+        pipeline = FeaturePipeline(
+            date_column="date",
+            target_columns=["daily_logins", "daily_deposits", "daily_registrations"],
+            lags=[1, 7, 14, 30],
+            rolling_windows=[7, 14, 30],
+        )
+        result = pipeline.fit_transform(df)
+
+        # Should have registration lag features
+        assert "daily_registrations_lag_1" in result.columns
+        assert "daily_registrations_lag_7" in result.columns
+        assert "daily_registrations_lag_14" in result.columns
+        assert "daily_registrations_lag_30" in result.columns
+
+        # Should have registration rolling features
+        assert "daily_registrations_rolling_mean_7" in result.columns
+        assert "daily_registrations_rolling_mean_14" in result.columns
+        assert "daily_registrations_rolling_mean_30" in result.columns
+        assert "daily_registrations_rolling_std_7" in result.columns
+
+        # Verify lag values are correct
+        assert result["daily_registrations_lag_1"].iloc[1] == df["daily_registrations"].iloc[0]
